@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: voltora_db
+    restart: always
+    environment:
+      POSTGRES_USER: voltora_user
+      POSTGRES_PASSWORD: voltora_secure_password
+      POSTGRES_DB: voltora_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # 2. Redis Cache & Task Queue
+  redis:
+    image: redis:7-alpine
+    container_name: voltora_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 3. FastAPI Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voltora_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://voltora_user:voltora_secure_password@postgres:5432/voltora_db
+      REDIS_URL: redis://redis:6379/0
+      DEVICE_API_KEY: change-me-device-key
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  pgdata:
