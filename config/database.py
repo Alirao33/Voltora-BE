@@ -26,7 +26,7 @@ if _db_url.startswith("sqlite"):
     if ":memory:" in _db_url or _db_url in ("sqlite://", "sqlite:///"):
         _db_kwargs["poolclass"] = StaticPool
 else:
-    _db_kwargs.update(pool_pre_ping=True, pool_size=10, max_overflow=20)
+    _db_kwargs.update(pool_pre_ping=True, pool_size=10, max_overflow=20, pool_recycle=3600)
 
 
 engine = create_engine(_db_url, **_db_kwargs)
