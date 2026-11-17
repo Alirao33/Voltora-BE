@@ -11,6 +11,7 @@ from constants.enums import BatteryState, PlanKind, Role
 from constants.seed import DEFAULT_PLANS, DEMO_STATIONS, RETIRED_PLAN_CODES
 from models import AppSetting, Battery, Locker, Plan, Station, User, Van
 from modules.lockers import refresh_status
+from modules.sites import ensure_lockers
 from modules.pricing import calculate_locker_plan_price, PricingConfig
 from utils.security import hash_password, normalize_phone
 
@@ -49,17 +50,8 @@ def bootstrap_admin(db: Session) -> None:
         log_bootstrap.warning("Bootstrap admin '%s' created", s.bootstrap_admin_username)
 
     # 2. Seed Default Locker Pass Plans
+    monthly_rate = 1000.0 / 30  # Rs 1,000 a month, so 6 months = 6,000 and a year = 12,000
     locker_plans = [
-        {
-            "code": "LOCKER_WK",
-            "name": "Weekly Locker Pass",
-            "kind": PlanKind.LOCKER,
-            "duration_type": "weekly",
-            "duration_days": 7,
-            "swaps_included": 0,
-            "price_pkr": calculate_locker_plan_price("weekly", base_daily_rate=50.0),
-            "is_active": True,
-        },
         {
             "code": "LOCKER_MO",
             "name": "Monthly Locker Pass",
@@ -67,7 +59,17 @@ def bootstrap_admin(db: Session) -> None:
             "duration_type": "monthly",
             "duration_days": 30,
             "swaps_included": 0,
-            "price_pkr": calculate_locker_plan_price("monthly", base_daily_rate=50.0),
+            "price_pkr": calculate_locker_plan_price("monthly", base_daily_rate=monthly_rate),
+            "is_active": True,
+        },
+        {
+            "code": "LOCKER_6M",
+            "name": "6-Month Locker Pass",
+            "kind": PlanKind.LOCKER,
+            "duration_type": "half_yearly",
+            "duration_days": 180,
+            "swaps_included": 0,
+            "price_pkr": calculate_locker_plan_price("half_yearly", base_daily_rate=monthly_rate),
             "is_active": True,
         },
         {
@@ -77,7 +79,7 @@ def bootstrap_admin(db: Session) -> None:
             "duration_type": "yearly",
             "duration_days": 365,
             "swaps_included": 0,
-            "price_pkr": calculate_locker_plan_price("yearly", base_daily_rate=50.0),
+            "price_pkr": calculate_locker_plan_price("yearly", base_daily_rate=monthly_rate),
             "is_active": True,
         },
     ]
@@ -183,6 +185,9 @@ def seed_demo(db: Session) -> None:
             )
             refresh_status(locker_obj)
 
+    db.flush()
+    for st in db.scalars(select(Station)):
+        ensure_lockers(db, st)
     van1 = db.scalar(select(Van).where(Van.name == "Van-1"))
     driver = db.scalar(select(User).where(User.username == "driver1"))
     if van1 and van1.driver_id is None and driver:

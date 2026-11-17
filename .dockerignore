@@ -1,0 +1,10 @@
+.env
+mysql.env
+*.db
+__pycache__/
+.venv/
+legacy/
+k8s/
+scripts/
+README.md
+requirements-ml.txt

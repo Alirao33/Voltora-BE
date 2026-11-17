@@ -42,6 +42,7 @@ from modules.alerts import raise_alert
 from modules.audit import audit
 from modules.batteries import apply_health, evaluate_pack_health, pick_pack
 from modules.bookings import place_booking, release_booking
+from modules.profit import record_profit
 from modules.payments import charge, order_payment, paid_replay, verify_webhook
 from modules.payments import refund as refund_payment  # release_order's `refund` flag would shadow it
 from modules.pricing import calculate_price, demand_factor, get_pricing_config
@@ -66,6 +67,15 @@ log_swap = logging.getLogger("voltora.swap")
 
 def new_order_code() -> str:
     return f"{secrets.randbelow(10000):04d}"
+
+
+def unique_pickup_code(db: Session) -> str:
+    """A locker code no other open order is using, so it differs every time."""
+    for _ in range(50):
+        code = new_order_code()
+        if not db.scalar(select(Order.id).where(Order.pickup_code == code, Order.status.in_(OPEN_ORDER))):
+            return code
+    return new_order_code()
 
 
 def new_guest_ref() -> str:
@@ -176,8 +186,16 @@ def create_order(
         capacity_used_ah=ah,
         chemistry=pack.chemistry,
         delivery=delivery,
+        delivery_km=(
+            haversine_km(st.latitude, st.longitude, req.delivery_lat, req.delivery_lon)
+            if delivery and req.delivery_lat is not None and req.delivery_lon is not None
+            else None
+        ),
         demand=df,
         cfg=cfg,
+        soc_used_pct=ah / pack.full_charge_capacity_ah * 100 if pack.full_charge_capacity_ah else None,
+        soh_pct=pack.soh,
+        pack=pack,
     )
     due_at = None
     if req.pay_later:
@@ -206,7 +224,7 @@ def create_order(
         total_pkr=price.total_pkr,
         charged_pkr=charge_amount,
         payment_due_at=due_at,
-        pickup_code=new_order_code(),
+        pickup_code=unique_pickup_code(db),
         delivery_address=req.delivery_address,
         delivery_lat=req.delivery_lat,
         delivery_lon=req.delivery_lon,
@@ -316,19 +334,41 @@ def complete_order(db: Session, order: Order, returned_pack_id: Optional[str] = 
                 capacity_used_ah=ah_used,
                 chemistry=old.chemistry,
                 delivery=order.mode == OrderMode.HOME,
+                delivery_km=order.price.get("delivery_km"),
                 demand=order.price.get("demand_factor", 1.0),
                 cfg=price_cfg,
                 returned_temp_c=old.temperature_c,
+                soc_used_pct=ah_used / old.full_charge_capacity_ah * 100 if old.full_charge_capacity_ah else None,
+                soh_pct=old.soh,
+                pack=old,
             )
-            order.actual_total_pkr = actual.total_pkr
+            total = actual.total_pkr
+            out = db.get(Battery, order.pack_out_id) if order.pack_out_id else None
+            if out is not None and old.soh >= out.soh and price_cfg.same_soh_discount_pct > 0:
+                # Returned in the same SoH (or better): discount on the whole bill of this swap.
+                disc = money(total * price_cfg.same_soh_discount_pct)
+                total = money(total - disc)
+                order.price = {**order.price, "same_soh_discount_pkr": disc}
+            order.actual_total_pkr = total
+            record_profit(
+                db, order, units_kwh=actual.energy_kwh, soc_charge=actual.soc_charge_pkr, soh_charge=actual.soh_charge_pkr,
+                before_discount=actual.total_pkr, after_discount=total,
+            )
             if order.subscription_id is None and order.payment_due_at is None:
-                order.settlement_delta_pkr = money(actual.total_pkr - order.charged_pkr)
+                order.settlement_delta_pkr = money(total - order.charged_pkr)
                 if order.settlement_delta_pkr < -1.0:
                     pay = order_payment(db, order.id)
                     if pay and pay.status == PaymentStatus.SUCCEEDED:
                         refund_payment(
                             db, pay, -order.settlement_delta_pkr, "settlement on actual energy used"
                         )
+
+    # No usable return reading (pack came back full or not scanned): log profit from the quoted price instead.
+    q = order.price or {}
+    record_profit(
+        db, order, units_kwh=q.get("energy_kwh") or 0.0, soc_charge=q.get("soc_charge_pkr") or 0.0, soh_charge=q.get("soh_charge_pkr") or 0.0,
+        before_discount=order.total_pkr, after_discount=order.total_pkr,
+    )
 
     if order.booking_id:
         b = db.get(Booking, order.booking_id)

@@ -48,6 +48,8 @@ class SubscriptionOut(BaseModel):
     starts_at: datetime
     ends_at: datetime
     status: SubscriptionStatus
+    station_id: Optional[str] = None
+    locker_id: Optional[str] = None
 
 
 class SubscribeRequest(BaseModel):

@@ -81,6 +81,22 @@ class Order(Base):
         _, d = self._delivery_driver()
         return (d.full_name or d.username) if d else None
 
+    locker_code_requested_at: Mapped[Optional[dt.datetime]]   # delivery man asked to see the locker code
+    locker_code_shared_at: Mapped[Optional[dt.datetime]]      # rider allowed it
+
+    @property
+    def locker_code_shared(self) -> bool:
+        return self.locker_code_shared_at is not None
+
+    @property
+    def locker_code_requested(self) -> bool:
+        return self.locker_code_requested_at is not None and self.locker_code_shared_at is None
+
+    @property
+    def driver_phone(self) -> Optional[str]:
+        _, d = self._delivery_driver()
+        return d.phone if d else None
+
     @property
     def _bill_base_pkr(self) -> float:
         return self.actual_total_pkr if self.actual_total_pkr is not None else self.total_pkr

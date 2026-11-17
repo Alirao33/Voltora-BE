@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from routes import auth
 from routes import driver
 from routes import guest
+from routes import handover
 from routes import subscriptions
 from routes import swaps
 from routes import system
@@ -18,6 +19,7 @@ from routes.admin import lockers as admin_lockers
 from routes.admin import orders as admin_orders
 from routes.admin import payments as admin_payments
 from routes.admin import plans as admin_plans
+from routes.admin import profit as admin_profit
 from routes.admin import pricing as admin_pricing
 from routes.admin import reports as admin_reports
 from routes.admin import riders as admin_riders
@@ -36,9 +38,11 @@ api_router.include_router(rider_orders.router)
 api_router.include_router(rider_bookings.router)
 api_router.include_router(rider_delivery.router)
 api_router.include_router(guest.router)
+api_router.include_router(handover.router)
 api_router.include_router(admin_sites.router)
 api_router.include_router(admin_lockers.router)
 api_router.include_router(admin_batteries.router)
+api_router.include_router(admin_profit.router)
 api_router.include_router(admin_pricing.router)
 api_router.include_router(admin_plans.router)
 api_router.include_router(admin_payments.router)

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
-from sqlalchemy import ForeignKey, Integer
+from typing import Optional
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from config.database import Base, enum_col
@@ -22,3 +23,5 @@ class Subscription(Base):
     status: Mapped[SubscriptionStatus] = mapped_column(
         enum_col(SubscriptionStatus), default=SubscriptionStatus.ACTIVE
     )
+    station_id: Mapped[Optional[str]] = mapped_column(String(40))  # set once, when the rider picks a station
+    locker_id: Mapped[Optional[str]] = mapped_column(String(40), index=True)

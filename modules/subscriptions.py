@@ -10,6 +10,7 @@ from typing import Optional
 
 from constants.enums import PaymentMethod, PaymentStatus, PlanKind, SubscriptionStatus
 from models import Plan, Subscription, User
+from modules.locker_pass import require_free_locker
 from modules.payments import charge, paid_replay
 from schemas.plan import SubscribeRequest, SubscriptionRequest
 from utils.dates import now_utc
@@ -45,6 +46,7 @@ def subscribe(db: Session, user: User, plan: Plan, method: PaymentMethod, refere
         )
     ):
         raise HTTPException(409, "You already have an active subscription")
+    require_free_locker(db)  # every pass needs a locker, so stop before taking money
     pay = charge(
         db,
         user=user,
@@ -107,7 +109,7 @@ def list_locker_plans(db: Session) -> list[dict]:
     db_plans = db.scalars(
         select(Plan)
         .where(Plan.is_active.is_(True), Plan.code != "PER_SWAP", Plan.price_pkr > 0)
-        .order_by(Plan.id)
+        .order_by(Plan.duration_days, Plan.id)
     ).all()
     
     formatted_plans = []

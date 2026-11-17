@@ -58,6 +58,13 @@ class VanTaskOut(BaseModel):
     confirmed_at: Optional[datetime] = None
     order_ref: Optional[str] = None
     customer_name: Optional[str] = None
+    order_total_pkr: Optional[float] = None
+    delivery_charge_pkr: Optional[float] = None
+    delivery_km: Optional[float] = None
+    payment_note: Optional[str] = None
+    station_label: Optional[str] = None
+    locker_code_state: str = "NONE"
+    locker_code: Optional[str] = None
     customer_phone: Optional[str] = None
 
 

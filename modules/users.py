@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from constants.enums import Role
 from models import Station, User
 from modules.audit import audit
+from modules.profit import charge_registration_fee
 from schemas.auth import RiderStatusUpdate, UserAdminUpdate
 
 def me(user: User):
@@ -38,6 +39,8 @@ def update_user(user_id: int, body: UserAdminUpdate, actor: User, db: Session):
 
     for k, v in updates.items():
         setattr(user, k, v)
+    if target_role == Role.STATION_ADMIN and old_role != Role.STATION_ADMIN:
+        charge_registration_fee(db, user, actor)  # the registration fee is due when a station admin is registered
     if body.role and body.role != old_role:
         audit(
             db,

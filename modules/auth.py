@@ -134,9 +134,12 @@ def register(body: UserCreate, db: Session):
         raise HTTPException(409, "Username is already registered")
     if body.phone and db.scalar(select(User).where(User.phone == body.phone)):
         raise HTTPException(409, "Phone number is already registered")
+    if body.email and db.scalar(select(User).where(User.email == body.email)):
+        raise HTTPException(409, "Email is already registered")
 
     user = User(
         username=body.username,
+        email=body.email,
         phone=body.phone,
         full_name=body.full_name,
         hashed_password=hash_password(body.password),
@@ -211,7 +214,7 @@ def otp_verify(body: OtpVerify, db: Session):
 def admin_login(body: AdminLogin, db: Session):
     user = db.scalar(select(User).where(User.username == body.username))
     if not user or not verify_password(body.password, user.hashed_password):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect username or password")
     if user.role not in ADMIN_ROLES:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not an admin account")
     if not user.is_active:

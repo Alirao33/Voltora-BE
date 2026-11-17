@@ -59,6 +59,9 @@ def guest_quote(body: GuestQuoteRequest, db: Session):
         returned_temp_c=body.temperature_c if body.temperature_c is not None else (pack.temperature_c if pack else None),
         is_subscribed=body.is_subscribed,
         plan_code=body.plan_code,
+        soc_used_pct=body.soc_used_pct,
+        soh_pct=body.soh_pct if body.soh_pct is not None else (pack.soh if pack else None),
+        pack=pack,
     )
     return {
         "station_id": st.id,

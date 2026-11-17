@@ -96,5 +96,7 @@ def init_db() -> None:
     with engine.begin() as conn:  # codes used to be stored as "#1234"; they are plain digits now
         for table, col in (("orders", "pickup_code"), ("orders", "delivery_otp"), ("bookings", "unlock_code")):
             conn.execute(text(f"UPDATE {table} SET {col} = REPLACE({col}, '#', '') WHERE {col} LIKE '#%'"))
+    with engine.begin() as conn:  # accounts made before the email field used their email as the username
+        conn.execute(text("UPDATE users SET email = username WHERE email IS NULL AND username LIKE '%@%'"))
     if engine.dialect.name == "postgresql":
         enable_timescale()

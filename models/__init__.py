@@ -8,9 +8,12 @@ from models.forecast_model_version import ForecastModelVersion
 from models.forecast_record import ForecastRecord
 from models.locker import Locker
 from models.order import Order
+from models.order_message import OrderMessage
 from models.otp_challenge import OtpChallenge
 from models.payment import Payment
 from models.plan import Plan
+from models.profit import PlatformFee, ProfitEntry
+from models.pricing_change import PricingChange
 from models.station import Station
 from models.subscription import Subscription
 from models.telemetry_reading import TelemetryReading
@@ -29,9 +32,13 @@ __all__ = [
     "ForecastRecord",
     "Locker",
     "Order",
+    "OrderMessage",
     "OtpChallenge",
     "Payment",
     "Plan",
+    "PlatformFee",
+    "ProfitEntry",
+    "PricingChange",
     "Station",
     "Subscription",
     "TelemetryReading",

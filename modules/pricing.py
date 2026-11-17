@@ -9,6 +9,7 @@ from typing import Optional
 
 from constants.enums import Chemistry
 from models import AppSetting, User
+from modules.battery_health import health_score
 from modules.audit import audit
 from utils.dates import PKT
 from utils.numbers import money
@@ -20,6 +21,7 @@ class PricingConfig(BaseModel):
     wear_pkr_per_kwh_nmc: float = Field(12.0, ge=0)
     operating_cost_pkr: float = Field(30.0, ge=0)
     delivery_cost_pkr: float = Field(150.0, ge=0)
+    delivery_rate_pkr_per_km: float = Field(50.0, ge=0)       # extra charge per km from the station to the customer
     margin: float = Field(0.20, ge=0, le=2)
     peak_demand_factor: float = Field(1.2, ge=1.0, le=3.0)
     peak_hours_pkt: list[tuple[int, int]] = Field(default_factory=lambda: [(8, 10), (17, 20)])
@@ -31,6 +33,12 @@ class PricingConfig(BaseModel):
     green_rebate_pct: float = 0.15
     standard_max_c: float = 42.0
     thermal_penalty_pct: float = 0.10
+    soc_rate_pkr_per_unit: float = Field(10.0, ge=0)          # fixed PKR rate per unit (kWh) of energy used in a swap
+    # SoH penalties: admin-set PKR per penalty point of each health formula (temperature, cycle, fault)
+    same_soh_discount_pct: float = Field(0.10, ge=0, le=0.5)  # off the whole bill when the pack comes back in the same SoH
+    penalty_temp_pkr_per_pt: float = Field(2.0, ge=0)
+    penalty_cycle_pkr_per_pt: float = Field(1.0, ge=0)
+    penalty_fault_pkr_per_pt: float = Field(1.0, ge=0)
 
 
 class PriceBreakdown(BaseModel):
@@ -39,6 +47,16 @@ class PriceBreakdown(BaseModel):
     wear_cost_pkr: float
     operating_cost_pkr: float
     delivery_cost_pkr: float
+    delivery_km: Optional[float] = None
+    delivery_distance_charge_pkr: float = 0.0
+    soc_used_pct: Optional[float] = None
+    soh_pct: Optional[float] = None
+    health_score: Optional[float] = None
+    penalty_temp: float = 0.0
+    penalty_cycle: float = 0.0
+    penalty_fault: float = 0.0
+    soc_charge_pkr: float = 0.0
+    soh_charge_pkr: float = 0.0
     cost_base_pkr: float
     margin: float
     margin_amount_pkr: float
@@ -68,14 +86,9 @@ def calculate_locker_plan_price(
     base_daily_rate: float = 50.0,
     discount_factor: float = 1.0,
 ) -> float:
-    """Calculate Weekly, Monthly, or Yearly locker pass price from a base daily rate."""
-    duration_days = {"weekly": 7, "monthly": 30, "yearly": 365}
-    tier_discounts = {"weekly": 1.0, "monthly": 0.85, "yearly": 0.70}
-
-    key = duration_type.lower()
-    days = duration_days.get(key, 30)
-    discount = tier_discounts.get(key, 1.0)
-    return round(days * base_daily_rate * discount * discount_factor, 2)
+    """Locker pass price: whole months (1, 6 or 12) x 30 days x the daily rate, so 6 and 12 months cost 6x and 12x one month."""
+    months = {"monthly": 1, "half_yearly": 6, "yearly": 12}
+    return round(months.get(duration_type.lower(), 1) * 30 * base_daily_rate * discount_factor, 2)
 
 
 def calculate_price(
@@ -89,6 +102,10 @@ def calculate_price(
     returned_temp_c: Optional[float] = None,
     is_subscribed: bool = False,
     plan_code: Optional[str] = None,
+    soc_used_pct: Optional[float] = None,
+    soh_pct: Optional[float] = None,
+    pack=None,
+    delivery_km: Optional[float] = None,
 ) -> PriceBreakdown:
     cfg = cfg or PricingConfig()
     kwh = voltage * capacity_used_ah / 1000.0
@@ -121,8 +138,23 @@ def calculate_price(
 
     # 4. Operating Fee & Cost Base
     operating_cost = 0.0 if is_subscribed else cfg.operating_cost_pkr
+    soc_charge = kwh * cfg.soc_rate_pkr_per_unit  # SoC pricing is per unit of energy, not per percent
+    # SoH: the pack's composite health formulas give three penalty points; the admin sets what each point costs.
+    hr = None
+    if pack is not None:
+        hr = health_score(
+            soh=pack.soh, temperature_c=pack.temperature_c, cycles=pack.cycle_count, faults=pack.fault_count,
+            operating_hours=pack.operating_hours, chemistry=pack.chemistry,
+        )
+    soh_charge = (
+        hr.penalty_temp * cfg.penalty_temp_pkr_per_pt
+        + hr.penalty_cycle * cfg.penalty_cycle_pkr_per_pt
+        + hr.penalty_fault * cfg.penalty_fault_pkr_per_pt
+    ) if hr else 0.0
     base = grid + wear + operating_cost + deliv
-    total = base * (1 + cfg.margin) * demand
+    # Distance, SoC and SoH are billed at exactly the rates set, outside the margin and demand multipliers.
+    km_charge = round((delivery_km or 0.0) * cfg.delivery_rate_pkr_per_km, 2) if delivery else 0.0
+    total = base * (1 + cfg.margin) * demand + km_charge + soc_charge + soh_charge
 
     # 5. Optional Thermal Adjustment Rebate / Penalty
     tier, adj = "NONE", 0.0
@@ -142,13 +174,23 @@ def calculate_price(
         wear_cost_pkr=money(wear),
         operating_cost_pkr=money(operating_cost),
         delivery_cost_pkr=money(deliv),
+        delivery_km=round(delivery_km, 2) if delivery and delivery_km is not None else None,
+        delivery_distance_charge_pkr=money(km_charge),
+        soc_used_pct=None if soc_used_pct is None else round(soc_used_pct, 1),
+        soh_pct=None if soh_pct is None else round(soh_pct, 1),
+        health_score=hr.score if hr else None,
+        penalty_temp=round(hr.penalty_temp, 1) if hr else 0.0,
+        penalty_cycle=round(hr.penalty_cycle, 1) if hr else 0.0,
+        penalty_fault=round(hr.penalty_fault, 1) if hr else 0.0,
+        soc_charge_pkr=money(soc_charge),
+        soh_charge_pkr=money(soh_charge),
         cost_base_pkr=money(base),
         margin=cfg.margin,
         margin_amount_pkr=money(base * cfg.margin),
         demand_factor=demand,
         thermal_tier=tier,
         thermal_adjustment_pkr=money(adj),
-        delivery_component_pkr=money(deliv * (1 + cfg.margin) * demand) if delivery else 0.0,
+        delivery_component_pkr=money(deliv * (1 + cfg.margin) * demand + km_charge) if delivery else 0.0,
         total_pkr=money(final),
     )
 

@@ -67,6 +67,10 @@ class OrderOut(BaseModel):
     bill_due_pkr: Optional[float] = None
     van_name: Optional[str] = None      # home delivery: set once the admin approves and a van is assigned
     driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
+    locker_code_requested: bool = False
+    locker_code_shared: bool = False
+    delivery_address: Optional[str] = None
 
 
 class PayBillRequest(BaseModel):

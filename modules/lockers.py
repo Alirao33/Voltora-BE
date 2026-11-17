@@ -137,7 +137,7 @@ def update_locker(locker_id: str, body: LockerUpdate, actor: User, db: Session):
 
 
 def update_locker_rates(req: LockerRateUpdateRequest, actor: User, db: Session):
-    tiers = ["weekly", "monthly", "yearly"]
+    tiers = ["monthly", "half_yearly", "yearly"]
     updated_plans = []
 
     for duration in tiers:

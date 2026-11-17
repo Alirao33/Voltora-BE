@@ -6,6 +6,8 @@ import asyncio
 import contextlib
 import time
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
@@ -80,5 +82,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.middleware("http")(metrics_middleware)
+
+    @app.exception_handler(OperationalError)
+    async def database_unreachable(_: Request, exc: OperationalError):
+        # A dropped database connection is not the user's fault: say so instead of a bare "Internal Server Error".
+        return JSONResponse(status_code=503, content={"detail": "The database is not reachable right now. Please try again in a moment."})
+
     app.include_router(api_router)
     return app

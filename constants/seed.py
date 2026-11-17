@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from constants.enums import PlanKind
 
+MIN_LOCKERS = 10  # a station needs at least this many lockers, booked or empty
+
 DEFAULT_PLANS = [
     ("PER_SWAP", "Pay per swap", PlanKind.PER_SWAP, 0, 0.0),
 ]
 
 # Swap-count plans are retired: swaps are billed by SoH/SoC, subscriptions are locker-only.
-RETIRED_PLAN_CODES = ("MONTHLY_10", "MONTHLY_30", "MONTHLY_60", "LOCKER_30")
+RETIRED_PLAN_CODES = ("MONTHLY_10", "MONTHLY_30", "MONTHLY_60", "LOCKER_30", "LOCKER_WK")
 
 
 DEMO_STATIONS = [

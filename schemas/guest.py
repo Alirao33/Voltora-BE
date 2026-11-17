@@ -20,6 +20,8 @@ class GuestQuoteRequest(BaseModel):
     delivery: bool = False
     is_subscribed: bool = False
     plan_code: Optional[str] = None
+    soc_used_pct: Optional[float] = Field(None, ge=0, le=100)
+    soh_pct: Optional[float] = Field(None, ge=0, le=100)
 
     @model_validator(mode="after")
     def _need_location(self):

@@ -11,11 +11,20 @@ from schemas.base import clean_phone, ORM
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
+    email: Optional[str] = Field(None, max_length=120)  # required for riders in the app; older clients may omit it
     password: str = Field(..., min_length=8, max_length=128)
     phone: Optional[str] = None
     full_name: Optional[str] = Field(None, max_length=120)
 
     _p = field_validator("phone")(clean_phone)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value):
+        value = (value or "").strip().lower()
+        if value and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid email address")
+        return value or None
 
     @field_validator("password")
     @classmethod
@@ -37,6 +46,7 @@ class UserOut(BaseModel):
     model_config = ORM
     id: int
     username: Optional[str] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
     full_name: Optional[str] = None
     role: Role

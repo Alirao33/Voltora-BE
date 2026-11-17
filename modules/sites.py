@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from constants.seed import MIN_LOCKERS
 from models import Locker, Station, User
 from modules.audit import audit
 from modules.bookings import expire_stale_bookings
@@ -14,6 +15,15 @@ from modules.stations import station_view
 from schemas.locker import LockerOut
 from schemas.station import StationCreate, StationCreateRequest, StationUpdate
 from utils.access import scoped_station_id
+
+def ensure_lockers(db: Session, st: Station) -> None:
+    """Open stations always have lockers for total_lockers (never fewer than MIN_LOCKERS)."""
+    st.total_lockers = max(st.total_lockers or 0, MIN_LOCKERS)
+    have = set(db.scalars(select(Locker.id).where(Locker.station_id == st.id)))
+    for d in range(1, st.total_lockers + 1):
+        if f"{st.id}-L{d}" not in have:
+            db.add(Locker(id=f"{st.id}-L{d}", station_id=st.id, door_number=f"Door {d:02d}"))
+
 
 def list_sites(actor: User, db: Session):
     expire_stale_bookings(db)
@@ -46,6 +56,8 @@ def create_site(body: StationCreate, actor: User, db: Session):
         is_depot=body.is_depot,
     )
     db.add(st)
+    db.flush()
+    ensure_lockers(db, st)
     audit(db, actor, "CREATE_SITE", "station", sid, {"name": body.name})
     db.commit()
     return station_view(db, st, include_lockers=True)
@@ -65,8 +77,7 @@ def create_station_portal(req: StationCreateRequest, actor: User, db: Session):
     )
     db.add(st)
     db.flush()
-    for d in range(1, req.total_lockers + 1):
-        db.add(Locker(id=f"{sid}-L{d}", station_id=sid, door_number=f"Door {d:02d}"))
+    ensure_lockers(db, st)
     audit(db, actor, "CREATE_STATION", "station", sid, {"name": req.name, "lockers": req.total_lockers})
     db.commit()
     return {
@@ -84,6 +95,7 @@ def update_site(station_id: str, body: StationUpdate, actor: User, db: Session):
     changes = body.model_dump(exclude_unset=True)
     for k, v in changes.items():
         setattr(st, k, v)
+    ensure_lockers(db, st)
     audit(db, actor, "UPDATE_SITE", "station", station_id, changes)
     db.commit()
     return station_view(db, st)
