@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import create_engine, func, select, text  # noqa: E402
+from sqlalchemy import create_engine, func, inspect, select, text  # noqa: E402
 
 
 def migrate(src_url: str, dst_url: str, batch: int = 1000) -> dict[str, int]:
@@ -29,7 +29,12 @@ def migrate(src_url: str, dst_url: str, batch: int = 1000) -> dict[str, int]:
             if d.scalar(select(func.count()).select_from(table)):
                 raise SystemExit(f"Target table {table.name} is not empty; migrate into an empty database.")
             n = 0
-            for rows in iter(lambda r=s.execute(select(table)): [dict(x._mapping) for x in r.fetchmany(batch)], []):
+            if not inspect(src).has_table(table.name):
+                copied[table.name] = 0
+                continue
+            have = {c["name"] for c in inspect(src).get_columns(table.name)}  # older dbs lack newer columns; they stay NULL/default
+            cols = [c for c in table.columns if c.name in have]
+            for rows in iter(lambda r=s.execute(select(*cols)): [dict(x._mapping) for x in r.fetchmany(batch)], []):
                 d.execute(table.insert(), rows)
                 n += len(rows)
             copied[table.name] = n
