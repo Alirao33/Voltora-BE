@@ -71,11 +71,61 @@ def report_log(actor: User, db: Session, start=None, end=None, limit: int = 500)
                 "status": p.status.value,
             }
         )
+    # Pay-later swaps that are completed but not yet settled have no payment row, so add them as UNPAID rows.
+    uq = (
+        select(Order, User)
+        .outerjoin(User, Order.user_id == User.id)
+        .where(
+            Order.status == OrderStatus.COMPLETED,
+            Order.payment_due_at.is_not(None),
+            Order.bill_paid_at.is_(None),
+            Order.completed_at >= start,
+            Order.completed_at <= end,
+        )
+        .order_by(Order.id.desc())
+        .limit(limit)
+    )
+    if station:
+        uq = uq.where(Order.station_id == station)
+    unpaid_total = 0.0
+    for o, u in db.execute(uq).all():
+        pr = o.price or {}
+        due = money(max(0.0, (o.actual_total_pkr if o.actual_total_pkr is not None else o.total_pkr) - (o.charged_pkr or 0.0)))
+        if due <= 0:
+            continue
+        unpaid_total += due
+        rows.append(
+            {
+                "payment_id": f"order-{o.id}",
+                "date": o.completed_at,
+                "kind": "HOME_DELIVERY" if o.mode == OrderMode.HOME else "SWAP",
+                "reference": o.receipt_no or f"ORD-{o.id}",
+                "order_id": o.id,
+                "station_id": o.station_id,
+                "rider": (u.full_name or u.username) if u else "Guest",
+                "method": "PAY_LATER",
+                "soc_used_pct": pr.get("soc_used_pct"),
+                "soh_pct": pr.get("soh_pct"),
+                "health_score": pr.get("health_score"),
+                "energy_kwh": pr.get("energy_kwh"),
+                "same_soh_discount_pkr": pr.get("same_soh_discount_pkr"),
+                "soc_charge_pkr": pr.get("soc_charge_pkr"),
+                "soh_charge_pkr": pr.get("soh_charge_pkr"),
+                "demand_factor": pr.get("demand_factor"),
+                "paid_pkr": 0.0,
+                "refunded_pkr": 0.0,
+                "net_pkr": 0.0,
+                "unpaid_pkr": due,
+                "status": "UNPAID",
+            }
+        )
+    rows.sort(key=lambda r: r["date"] or datetime.min, reverse=True)
     return {
         "start": start,
         "end": end,
         "rows": rows,
         "totals": {
+            "unpaid_pkr": money(unpaid_total),
             "payments": len(rows),
             "paid_pkr": money(sum(x["paid_pkr"] for x in rows)),
             "refunded_pkr": money(sum(x["refunded_pkr"] for x in rows)),

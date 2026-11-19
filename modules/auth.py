@@ -220,9 +220,15 @@ def admin_login(body: AdminLogin, db: Session):
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "User is disabled")
 
+    s = get_settings()
+    if not s.admin_2fa_enabled:  # shortcut: local demo only; production keeps the two-step login
+        user.last_login_at = now_utc()
+        audit(db, user, "ADMIN_LOGIN", "user", user.id)
+        db.commit()
+        return token_pair(user)
+
     ch, code = issue_otp(db, purpose="ADMIN_2FA", phone=user.phone, user=user)
     db.commit()
-    s = get_settings()
     out: dict[str, Any] = {
         "challenge_id": ch.id,
         "expires_in": s.otp_ttl_seconds,

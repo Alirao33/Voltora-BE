@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_max_requests_per_10min: int = 5
     otp_dev_echo: bool = False                         # return OTP in API response (dev only)
+    admin_2fa_enabled: bool = True                     # False = admin password logs in directly (local demo only)
 
     bootstrap_admin_username: str = "admin"
     bootstrap_admin_password: str = "Admin@2026!"
