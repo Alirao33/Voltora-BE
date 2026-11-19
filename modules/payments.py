@@ -14,8 +14,7 @@ from config.settings import get_settings
 from constants.enums import PaymentMethod, PaymentStatus
 from integrations.payment_gateway import get_gateway, log_payments
 from models import Order, Payment, User
-from modules.audit import audit
-from schemas.payment import RefundRequest
+from utils.access import scoped_station_id
 
 def _in_flight() -> HTTPException:
     # 503 (not 409) so the client keeps the reference; its retry gets the original result via paid_replay.
@@ -104,11 +103,14 @@ def order_payment(db: Session, order_id: int) -> Optional[Payment]:
     )
 
 
-def refund_payment(payment_id: int, body: RefundRequest, actor: User, db: Session):
-    pay = db.get(Payment, payment_id)
-    if not pay:
-        raise HTTPException(404, "Payment not found")
-    refund(db, pay, body.amount_pkr, body.reason)
-    audit(db, actor, "REFUND", "payment", payment_id, {"amount_pkr": body.amount_pkr, "reason": body.reason})
-    db.commit()
-    return pay
+def list_payments(actor: User, db: Session, status: Optional[str] = None, limit: int = 100):
+    q = select(Payment).order_by(Payment.id.desc()).limit(min(max(limit, 1), 500))
+    sid = scoped_station_id(actor)
+    if sid:
+        q = q.join(Order, Payment.order_id == Order.id).where(Order.station_id == sid)  # station admins: their station's orders only
+    if status:
+        try:
+            q = q.where(Payment.status == PaymentStatus(status.upper()))
+        except ValueError:
+            raise HTTPException(422, f"Unknown payment status {status}")
+    return list(db.scalars(q))

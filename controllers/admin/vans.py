@@ -33,5 +33,9 @@ def list_tasks(status_: Optional[TaskStatus] = None, db: Session = Depends(get_d
     return fleet_service.list_tasks(status_=status_, db=db)
 
 
-def get_charging_plan(db: Session = Depends(get_db)):
-    return fleet_service.get_charging_plan(db=db)
+def get_charging_plan(actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return fleet_service.get_charging_plan(actor=actor, db=db)
+
+
+def recompute_charging_plan(actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return fleet_service.recompute_charging_plan(actor=actor, db=db)

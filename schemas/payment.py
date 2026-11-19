@@ -23,11 +23,6 @@ class PaymentOut(BaseModel):
     created_at: datetime
 
 
-class RefundRequest(BaseModel):
-    amount_pkr: Optional[float] = Field(None, gt=0)
-    reason: str = Field("admin refund", max_length=200)
-
-
 class PaymentWebhook(BaseModel):
     reference: str
     status: str                       # SUCCEEDED | FAILED

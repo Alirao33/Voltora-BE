@@ -105,6 +105,21 @@ class VanTask(Base):
         return self.station_id or (self._order().station_id if self._order() else None)
 
     @property
+    def delivery_stage(self) -> Optional[str]:
+        o = self._order()
+        return None if o is None else (o.delivery_stage or "ACCEPTED")
+
+    @property
+    def pack_id(self) -> Optional[str]:
+        o = self._order()
+        return o.pack_out_id if o else None
+
+    @property
+    def slot_id(self) -> Optional[str]:
+        o = self._order()
+        return o.slot_id if o else None
+
+    @property
     def customer_phone(self) -> Optional[str]:
         u = self._customer()
         return u.phone if u else None

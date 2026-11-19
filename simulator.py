@@ -157,6 +157,8 @@ class Api:
 def admin_login(api: Api, username: str, password: str) -> str:
     """Admin sign-in is two steps. The backend echoes the code in dev; otherwise it is asked for here."""
     challenge = api.post("/auth/admin/login", {"username": username, "password": password})
+    if "access_token" in challenge:  # the backend runs with ADMIN_2FA_ENABLED=false
+        return challenge["access_token"]
     code = challenge.get("dev_code") or input(f"Verification code for {username}: ").strip()
     return api.post("/auth/admin/verify", {"challenge_id": challenge["challenge_id"], "code": code})["access_token"]
 
@@ -242,7 +244,7 @@ def ride_wear(held: dict, out: dict, same_soh: bool) -> tuple[float, float]:
     return round(new_soh, 2), round(random.uniform(8.0, 30.0), 1)
 
 
-def one_swap(api: Api, admin: str, fleet: Fleet, stations: list[dict], name: str, rider: dict, args, n: int, total: int, charge_queue: list):
+def one_swap(api: Api, admin: str, fleet: Fleet, stations: list[dict], name: str, rider: dict, args, n: int, total: int):
     fleet.refresh()
     held = fleet.packs.get(rider["pack_id"])
     if not held:
@@ -293,9 +295,6 @@ def one_swap(api: Api, admin: str, fleet: Fleet, stations: list[dict], name: str
     rider["refunded"] += refund
     rider["pack_id"] = order["pack_out_id"]  # they ride away with the pack they were given
 
-    if not args.no_charge:
-        charge_queue.append((n + args.charge_delay, held["id"], st["id"], new_soh))
-
     print(f"Swap {n}/{total}  {name} at {st['id']} ({st['name']})  [{done['order_id']}, receipt {done.get('receipt_no')}]")
     print(f"  returned {held['id']}: SoC {soc_left}%  SoH {held['soh']:.2f} -> {new_soh:.2f} ({new_soh - held['soh']:+.2f})  cycles {held['cycle_count'] + 1}")
     print(f"  issued   {order['pack_out_id']}")
@@ -304,18 +303,17 @@ def one_swap(api: Api, admin: str, fleet: Fleet, stations: list[dict], name: str
     return done["id"]
 
 
-def charge_due(api: Api, admin: str, fleet: Fleet, queue: list, round_no: int):
-    """Chargers fill the packs that came back, so stations do not run dry."""
-    for item in [q for q in queue if q[0] <= round_no]:
-        _, pack_id, station_id, soh = item
-        queue.remove(item)
-        fleet.refresh()
-        pack = fleet.packs.get(pack_id)
-        if not pack or pack["state"] != "DEPLETED":
+def charge_tick(api: Api, admin: str, fleet: Fleet, riders: dict[str, dict], step: float):
+    """One charger tick: every depleted or charging pack sitting at a station gains `step` % SoC.
+    The backend moves it DEPLETED -> CHARGING -> CHARGED once it is (nearly) full, so a pack needs several ticks."""
+    fleet.refresh()
+    held = {r["pack_id"] for r in riders.values()}
+    for pack in fleet.packs.values():
+        if pack["state"] not in ("DEPLETED", "CHARGING") or not pack.get("station_id") or pack["id"] in held or (pack.get("soc") or 0) >= 100:
             continue
-        post_reading(api, admin, pack, soc=100.0, soh=soh, cycles=pack["cycle_count"], hours=pack["operating_hours"], temp=random.uniform(28.0, 33.0))
-        api.patch(f"/api/admin/batteries/{pack_id}", {"state": "CHARGED", "station_id": station_id}, admin)
-        print(f"  charger  {pack_id} is full again at {station_id}")
+        soc = min(100.0, (pack.get("soc") or 0.0) + step)
+        post_reading(api, admin, pack, soc=soc, soh=pack["soh"], cycles=pack["cycle_count"], hours=pack["operating_hours"] + 0.25, temp=random.uniform(28.0, 33.0))
+        print(f"  charger  {pack['id']} at {pack['station_id']}: SoC {pack.get('soc') or 0:.0f}% -> {soc:.0f}%")
 
 
 def profit_line(api: Api, admin: str, order_id: int | None):
@@ -383,13 +381,13 @@ def run_swaps(args) -> int:
     print(f"Riders ready: {', '.join(riders)}\n")
 
     order = list(riders)
-    charge_queue: list = []
     for n in range(1, args.rounds + 1):
         name = order[(n - 1) % len(order)]
         try:
-            order_id = one_swap(api, admin, fleet, stations, name, riders[name], args, n, args.rounds, charge_queue)
+            order_id = one_swap(api, admin, fleet, stations, name, riders[name], args, n, args.rounds)
             profit_line(api, admin, order_id)
-            charge_due(api, admin, fleet, charge_queue, n)
+            if not args.no_charge:
+                charge_tick(api, admin, fleet, riders, args.charge_step)
         except SimError as err:
             print(f"Swap {n}/{args.rounds}  {name}: FAILED - {err}")
         print()
@@ -409,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     sw.add_argument("--interval", type=float, default=2.0, help="seconds to wait between swaps (default 2)")
     sw.add_argument("--riders", default=DEFAULT_RIDERS, help=f"comma separated rider usernames (default {DEFAULT_RIDERS})")
     sw.add_argument("--same-soh-chance", type=float, default=0.25, help="share of swaps where the pack comes back in the same SoH, which earns the discount (default 0.25)")
-    sw.add_argument("--charge-delay", type=int, default=2, help="swaps before a returned pack is charged and put back in stock (default 2)")
+    sw.add_argument("--charge-step", type=float, default=35.0, help="SoC percent every depleted pack gains per round, so charging takes several rounds (default 35)")
     sw.add_argument("--no-charge", action="store_true", help="leave returned packs depleted (stations will run out of charged packs)")
     sw.add_argument("--seed", type=int, default=None, help="fix the random numbers to repeat a run")
     args = parser.parse_args(argv)

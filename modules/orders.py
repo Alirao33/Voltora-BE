@@ -228,7 +228,7 @@ def create_order(
         delivery_address=req.delivery_address,
         delivery_lat=req.delivery_lat,
         delivery_lon=req.delivery_lon,
-        delivery_otp=new_order_code() if delivery else None,
+        delivery_otp=f"{secrets.randbelow(1000000):06d}" if delivery else None,  # 6 digits, so it can't be mistaken for the 4-digit locker code
         hold_expires_at=None if delivery else now + timedelta(minutes=s.booking_grace_minutes),
     )
     db.add(order)
@@ -281,6 +281,7 @@ def create_order(
         bk = db.get(Booking, order.booking_id)
         if bk:
             bk.status = BookingStatus.CONFIRMED
+    audit(db, user, "CREATE_ORDER", "order", order.id, {"station_id": st.id, "mode": req.mode.value, "total_pkr": order.total_pkr, "charged_pkr": charge_amount}, station_id=st.id)
     db.commit()
     ORDERS.labels(order.status.value).inc()
     return order
@@ -384,6 +385,7 @@ def complete_order(db: Session, order: Order, returned_pack_id: Optional[str] = 
     st = db.get(Station, order.station_id)
     db.flush()
     check_stock_alert(db, st)
+    audit(db, db.get(User, order.user_id) if order.user_id else None, "COMPLETE_SWAP", "order", order.id, {"station_id": order.station_id, "pack_out": order.pack_out_id, "pack_in": order.pack_in_id}, station_id=order.station_id)
     db.commit()
     ORDERS.labels("COMPLETED").inc()
     return order
@@ -396,6 +398,7 @@ def cancel_order(db: Session, order: Order, reason: str = "cancelled by rider") 
             f"Only paid, not-yet-collected orders can be cancelled (order is {order.status.value})",
         )
     release_order(db, order, OrderStatus.CANCELLED, refund=True, reason=reason)
+    audit(db, db.get(User, order.user_id) if order.user_id else None, "CANCEL_ORDER", "order", order.id, {"reason": reason}, station_id=order.station_id)
     db.commit()
     return order
 
@@ -470,6 +473,7 @@ def pay_order_bill(order_id: int, body: PayBillRequest, user: User, db: Session)
         db.commit()
         raise HTTPException(402, "Payment could not be verified")
     order.bill_paid_at, order.penalty_pkr, order.charged_pkr = now_utc(), penalty, amount
+    audit(db, user, "PAY_BILL", "order", order.id, {"amount_pkr": amount}, station_id=order.station_id)
     db.commit()
     return order
 

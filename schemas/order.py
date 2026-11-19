@@ -69,6 +69,7 @@ class OrderOut(BaseModel):
     driver_name: Optional[str] = None
     driver_phone: Optional[str] = None
     locker_code_requested: bool = False
+    delivery_stage: Optional[str] = None
     locker_code_shared: bool = False
     delivery_address: Optional[str] = None
 

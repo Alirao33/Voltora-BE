@@ -11,7 +11,7 @@ from models import User
 from modules import delivery as delivery_service
 from modules import fleet as fleet_service
 from schemas.delivery import DeliveryHandoverOTP
-from schemas.van import LocationUpdate, TaskConfirm
+from schemas.van import LocationUpdate, TaskConfirm, TaskStage
 
 def driver_van(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return fleet_service.driver_van(user=user, db=db)
@@ -23,6 +23,10 @@ def driver_tasks(include_done: bool = False, user: User = Depends(get_current_us
 
 def update_location(body: LocationUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return fleet_service.update_location(body=body, user=user, db=db)
+
+
+def set_task_stage(task_id: int, body: TaskStage, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return fleet_service.set_task_stage(task_id=task_id, body=body, user=user, db=db)
 
 
 def confirm_driver_task(task_id: int, body: TaskConfirm = TaskConfirm(), user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -112,6 +112,7 @@ def ingest_reading(db: Session, r: TelemetryIn) -> IngestResult:
         TELEMETRY_MSGS.labels("duplicate").inc()
         return IngestResult(r.pack_id, duplicate=True)
 
+    prior_soc = b.soc
     b.voltage, b.current_a, b.temperature_c = r.voltage, r.current_a, r.temperature_c
     if r.rated_ah:
         b.rated_capacity_ah = r.rated_ah
@@ -193,6 +194,8 @@ def ingest_reading(db: Session, r: TelemetryIn) -> IngestResult:
     elif b.supply_voltage_v is not None:
         resolve_alerts(db, AlertType.LOW_SUPPLY, station_id=b.station_id, pack_id=None)
 
+    if b.state == BatteryState.DEPLETED and b.station_id and not b.van_id and b.soc > prior_soc:
+        b.state = BatteryState.CHARGING  # a depleted pack in a station slot whose SoC is rising is on the charger
     if b.state == BatteryState.CHARGING and b.soc >= 95 and b.temperature_c <= s.lockout_c:
         b.state = BatteryState.CHARGED
     evaluate_pack_health(db, b)

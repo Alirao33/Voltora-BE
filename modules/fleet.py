@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from datetime import timedelta
 from typing import Any, Optional
 
 from constants.enums import BatteryState, OrderStatus, TaskKind, TaskStatus
@@ -13,7 +14,8 @@ from modules.audit import audit
 from modules.orders import complete_order
 from modules.routing import plan_route, priority, StationState
 from modules.stations import check_stock_alert, station_stock
-from schemas.van import LocationUpdate, PlanRouteRequest, TaskConfirm, VanCreate, VanUpdate
+from schemas.van import LocationUpdate, PlanRouteRequest, TaskConfirm, TaskStage, VanCreate, VanUpdate
+from utils.access import scoped_station_id
 from utils.dates import now_utc
 
 def station_states(db: Session) -> list[StationState]:
@@ -117,6 +119,8 @@ def confirm_task(
             raise HTTPException(404, "Delivery order not found")
         if order.status not in (OrderStatus.PAID, OrderStatus.IN_PROGRESS):
             raise HTTPException(409, f"Order is {order.status.value}")
+        if (order.delivery_stage or "") != "EN_ROUTE":
+            raise HTTPException(409, "Mark the order Picked Up and En Route before handing over")
         if not delivery_otp or delivery_otp.strip() != (order.delivery_otp or ""):
             raise HTTPException(403, "Invalid delivery OTP")
         order.status = OrderStatus.IN_PROGRESS
@@ -168,11 +172,22 @@ def return_to_depot(db: Session, van: Van) -> int:
     return n
 
 
-def charging_plan(db: Session) -> list[dict[str, Any]]:
-    """Prioritize charging depleted packs at high-shortage stations first, then lowest SoC."""
+CHARGER_KW = 3.0  # planning assumption: one slot charger delivers 3 kW; windows are estimates, not measurements
+
+
+def charging_plan(db: Session, actor: Optional[User] = None) -> list[dict[str, Any]]:
+    """Charging windows for depleted/charging packs: high-shortage stations first, then lowest SoC.
+    Each pack sits in its own slot charger, so every window starts now and ends when the missing energy is in."""
     pri = {s.id: priority(s.target, s.current) for s in station_states(db)}
     rows = []
-    for b in db.scalars(select(Battery).where(Battery.state.in_((BatteryState.DEPLETED, BatteryState.CHARGING)))):
+    now = now_utc()
+    q = select(Battery).where(Battery.state.in_((BatteryState.DEPLETED, BatteryState.CHARGING)))
+    sid = scoped_station_id(actor) if actor else None
+    if sid:
+        q = q.where(Battery.station_id == sid)
+    for b in db.scalars(q):
+        need_kwh = max(0.0, (100.0 - b.soc) / 100.0 * b.full_charge_capacity_ah * b.nominal_voltage / 1000.0)
+        hours = need_kwh / CHARGER_KW
         rows.append(
             {
                 "pack_id": b.id,
@@ -182,6 +197,10 @@ def charging_plan(db: Session) -> list[dict[str, Any]]:
                 "health_score": b.health_score,
                 "station_priority": round(pri.get(b.station_id, 0.0), 4),
                 "supply_voltage_v": b.supply_voltage_v,
+                "energy_needed_kwh": round(need_kwh, 2),
+                "window_start": now,
+                "window_end": now + timedelta(hours=hours),
+                "charger_kw_assumed": CHARGER_KW,
             }
         )
     rows.sort(key=lambda r: (-r["station_priority"], r["soc"], r["pack_id"]))
@@ -231,8 +250,16 @@ def list_tasks(status_: Optional[TaskStatus], db: Session):
     return list(db.scalars(q.limit(200)))
 
 
-def get_charging_plan(db: Session):
-    return charging_plan(db)
+def get_charging_plan(actor: User, db: Session):
+    return charging_plan(db, actor)
+
+
+def recompute_charging_plan(actor: User, db: Session):
+    """Rebuild the windows from the packs' current SoC and log who asked."""
+    rows = charging_plan(db, actor)
+    audit(db, actor, "RECOMPUTE_CHARGING_PLAN", "station", scoped_station_id(actor) or "*", {"packs": len(rows)})
+    db.commit()
+    return rows
 
 
 def _my_van(db: Session, user: User) -> Van:
@@ -290,6 +317,29 @@ def confirm_driver_task(task_id: int, body: TaskConfirm, user: User, db: Session
         confirmed_pickup=body.confirmed_pickup,
         returned_pack_id=body.returned_pack_id,
     )
+
+
+def set_task_stage(task_id: int, body: TaskStage, user: User, db: Session):
+    """Driver moves a home delivery on: Accepted -> Picked Up from Locker -> En Route (Delivered is the OTP hand-over)."""
+    task = db.get(VanTask, task_id)
+    if not task or task.kind != TaskKind.DELIVERY or task.status != TaskStatus.PENDING:
+        raise HTTPException(404, "Delivery task not found")
+    _check_van(task, user, db)
+    order = db.get(Order, task.order_id) if task.order_id else None
+    if not order or order.status not in (OrderStatus.PAID, OrderStatus.IN_PROGRESS):
+        raise HTTPException(409, "Order is not open")
+    if body.stage == "PICKED_UP":
+        if order.delivery_stage:
+            raise HTTPException(409, f"Order is already {order.delivery_stage}")
+        if not order.locker_code_shared:
+            raise HTTPException(409, "Get the locker code from the rider before picking up the pack")
+    elif order.delivery_stage != "PICKED_UP":
+        raise HTTPException(409, "Mark the pack Picked Up first")
+    order.delivery_stage = body.stage
+    audit(db, user, "DELIVERY_" + body.stage, "order", order.id, {"station_id": order.station_id}, station_id=order.station_id)
+    db.commit()
+    db.refresh(task)
+    return task
 
 
 def driver_return_to_depot(user: User, db: Session):

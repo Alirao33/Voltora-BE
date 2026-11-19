@@ -10,6 +10,7 @@ from typing import Optional
 
 from constants.enums import PaymentMethod, PaymentStatus, PlanKind, SubscriptionStatus
 from models import Plan, Subscription, User
+from modules.audit import audit
 from modules.locker_pass import require_free_locker
 from modules.payments import charge, paid_replay
 from schemas.plan import SubscribeRequest, SubscriptionRequest
@@ -30,23 +31,23 @@ def active_subscription(db: Session, user: Optional[User]) -> Optional[Subscript
     )
 
 
-def subscribe(db: Session, user: User, plan: Plan, method: PaymentMethod, reference: str) -> Subscription:
+def subscribe(db: Session, user: User, plan: Plan, method: PaymentMethod, reference: str, upgrade: bool = False) -> Subscription:
     prev = paid_replay(db, user, reference, "PLAN")
     if prev and prev.subscription_id:
         return db.get(Subscription, prev.subscription_id)
     if plan.kind == PlanKind.PER_SWAP or not plan.is_active:
         raise HTTPException(400, "This plan cannot be subscribed to")
-    if db.scalar(
-        select(func.count())
-        .select_from(Subscription)
-        .where(
-            Subscription.user_id == user.id,
-            Subscription.status == SubscriptionStatus.ACTIVE,
-            Subscription.ends_at > now_utc(),
-        )
-    ):
+    old = current_subscription(db, user)
+    if upgrade:
+        # Direct upgrade: full price of the new plan, old plan ends with no refund, locker stays the same.
+        if not old:
+            raise HTTPException(404, "No active subscription to upgrade")
+        if plan.price_pkr < db.get(Plan, old.plan_id).price_pkr:
+            raise HTTPException(400, "Choose the same or a higher plan")
+    elif old:
         raise HTTPException(409, "You already have an active subscription")
-    require_free_locker(db)  # every pass needs a locker, so stop before taking money
+    else:
+        require_free_locker(db)  # every pass needs a locker, so stop before taking money
     pay = charge(
         db,
         user=user,
@@ -65,9 +66,15 @@ def subscribe(db: Session, user: User, plan: Plan, method: PaymentMethod, refere
         swaps_remaining=plan.swaps_included,
         ends_at=now_utc() + timedelta(days=plan.duration_days),
     )
+    if upgrade:
+        old.status = SubscriptionStatus.CANCELLED
+        sub.station_id, sub.locker_id = old.station_id, old.locker_id
+        if plan.id == old.plan_id:  # renewing the same plan: the unused days carry over
+            sub.ends_at = old.ends_at + timedelta(days=plan.duration_days)
     db.add(sub)
     db.flush()
     pay.subscription_id = sub.id
+    audit(db, user, "RENEW_OR_UPGRADE_PLAN" if upgrade else "SUBSCRIBE_PLAN", "subscription", sub.id, {"plan": plan.code, "amount_pkr": plan.price_pkr})
     db.commit()
     return sub
 
@@ -93,7 +100,8 @@ def cancel_subscription(user: User, db: Session):
     sub = current_subscription(db, user)
     if not sub:
         raise HTTPException(404, "No active subscription to cancel")
-    sub.status = SubscriptionStatus.CANCELLED  # no refund is issued
+    sub.status = SubscriptionStatus.CANCELLED  # no refund is issued, and it will not renew
+    audit(db, user, "CANCEL_PLAN", "subscription", sub.id)
     db.commit()
     return sub
 
@@ -103,6 +111,13 @@ def subscribe_plan(plan_id: int, body: SubscribeRequest, user: User, db: Session
     if not plan:
         raise HTTPException(404, "Plan not found")
     return subscribe(db, user, plan, body.payment_method, body.payment_reference)
+
+
+def upgrade_plan(plan_id: int, body: SubscribeRequest, user: User, db: Session):
+    plan = db.get(Plan, plan_id)
+    if not plan:
+        raise HTTPException(404, "Plan not found")
+    return subscribe(db, user, plan, body.payment_method, body.payment_reference, upgrade=True)
 
 
 def list_locker_plans(db: Session) -> list[dict]:

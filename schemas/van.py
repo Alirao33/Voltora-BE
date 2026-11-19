@@ -66,6 +66,13 @@ class VanTaskOut(BaseModel):
     locker_code_state: str = "NONE"
     locker_code: Optional[str] = None
     customer_phone: Optional[str] = None
+    delivery_stage: Optional[str] = None
+    pack_id: Optional[str] = None
+    slot_id: Optional[str] = None
+
+
+class TaskStage(BaseModel):
+    stage: str = Field(..., pattern="^(PICKED_UP|EN_ROUTE)$")
 
 
 class TaskConfirm(BaseModel):

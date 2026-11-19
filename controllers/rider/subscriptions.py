@@ -29,6 +29,10 @@ def subscribe_plan(plan_id: int, body: SubscribeRequest, user: User = Depends(ge
     return subscriptions_service.subscribe_plan(plan_id=plan_id, body=body, user=user, db=db)
 
 
+def upgrade_plan(plan_id: int, body: SubscribeRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return subscriptions_service.upgrade_plan(plan_id=plan_id, body=body, user=user, db=db)
+
+
 def locker_pass(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return locker_pass_service.locker_pass(user=user, db=db)
 

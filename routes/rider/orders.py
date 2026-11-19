@@ -5,11 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from controllers.rider import orders as controller
+from controllers.rider import summary
 from guards.auth import get_current_user
 from schemas.order import OrderOut
 
 router = APIRouter(prefix="/api/rider", tags=["rider"])
 
+router.add_api_route("/summary", summary.rider_summary, methods=["GET"], dependencies=[Depends(get_current_user)])
 router.add_api_route("/orders", controller.create_rider_order, methods=["POST"], response_model=OrderOut, status_code=201, dependencies=[Depends(get_current_user)])
 router.add_api_route("/orders", controller.list_orders, methods=["GET"], response_model=list[OrderOut], dependencies=[Depends(get_current_user)])
 router.add_api_route("/orders/{order_id}", controller.get_order, methods=["GET"], response_model=OrderOut, dependencies=[Depends(get_current_user)])

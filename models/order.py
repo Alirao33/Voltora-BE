@@ -81,6 +81,7 @@ class Order(Base):
         _, d = self._delivery_driver()
         return (d.full_name or d.username) if d else None
 
+    delivery_stage: Mapped[Optional[str]] = mapped_column(String(20))   # PICKED_UP | EN_ROUTE, set by the driver; None = accepted
     locker_code_requested_at: Mapped[Optional[dt.datetime]]   # delivery man asked to see the locker code
     locker_code_shared_at: Mapped[Optional[dt.datetime]]      # rider allowed it
 
