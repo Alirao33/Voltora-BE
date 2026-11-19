@@ -3,3 +3,5 @@ mysql.env
 *.db
 __pycache__/
 .venv/
+.vercel
+.env*

@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from constants.enums import OrderMode
 from models import Battery, Plan, Station
@@ -16,16 +17,24 @@ from schemas.guest import GuestQuoteRequest, GuestSwapRequest
 from schemas.locker import LockerOut
 from schemas.order import OrderCreate
 from utils.dates import now_utc
+from utils.geo import haversine_km
 
-def public_stations(db: Session):
+def public_stations(db: Session, lat: Optional[float] = None, lon: Optional[float] = None, radius_km: Optional[float] = None):
     expire_stale_bookings(db)
     db.commit()
-    return [
+    views = [
         station_view(db, st)
         for st in db.scalars(
             select(Station).where(Station.is_active.is_(True), Station.is_depot.is_(False)).order_by(Station.id)
         )
     ]
+    if lat is None or lon is None:
+        return views
+    # With the rider's position: add the distance, nearest first, and hide stations outside the radius.
+    for v in views:
+        v["distance_km"] = round(haversine_km(lat, lon, v["latitude"], v["longitude"]), 2)
+    views.sort(key=lambda v: v["distance_km"])
+    return [v for v in views if radius_km is None or v["distance_km"] <= radius_km]
 
 
 def public_station(station_id: str, db: Session):

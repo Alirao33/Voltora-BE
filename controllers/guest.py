@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, Query
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from config.database import get_db
 from modules import guest as guest_service
 from schemas.guest import GuestQuoteRequest, GuestSwapRequest
 
-def public_stations(db: Session = Depends(get_db)):
-    return guest_service.public_stations(db=db)
+def public_stations(
+    lat: Optional[float] = Query(None, ge=-90, le=90),
+    lon: Optional[float] = Query(None, ge=-180, le=180),
+    radius_km: Optional[float] = Query(None, gt=0, le=500),
+    db: Session = Depends(get_db),
+):
+    return guest_service.public_stations(db=db, lat=lat, lon=lon, radius_km=radius_km)
 
 
 def public_station(station_id: str, db: Session = Depends(get_db)):
