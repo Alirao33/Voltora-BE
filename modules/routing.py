@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from utils.geo import haversine_km
+from utils.structures import MinHeap
 
 def shortage(target: int, current: int) -> int:
     return max(0, target - current)
@@ -43,19 +44,21 @@ def plan_route(
     dist=haversine_km,
 ) -> list[Stop]:
     """Build shortage queue sorted by priority DESC then distance ASC; allocate drops & pickups along route."""
-    queue = []
+    # Min-heap keyed (-priority, distance, id): pops the highest priority first, nearest first on ties.
+    heap = MinHeap()
     for s in stations:
         sh = shortage(s.target, s.current)
         if sh > 0:
-            queue.append((priority(s.target, s.current), dist(van_lat, van_lon, s.lat, s.lon), sh, s))
-    queue.sort(key=lambda t: (-t[0], t[1], t[3].id))
+            heap.push((-priority(s.target, s.current), dist(van_lat, van_lon, s.lat, s.lon), s.id, sh, s))
 
     route: list[Stop] = []
     pos = (van_lat, van_lon)
     on_board = van_packs
     picked = 0
 
-    for pr, _, sh, s in queue:
+    while len(heap):
+        npr, _, _, sh, s = heap.pop()
+        pr = -npr
         if on_board <= 0:
             break
         drop = min(sh, on_board)
