@@ -243,10 +243,12 @@ def plan_rebalancing(body: PlanRouteRequest, actor: User, db: Session):
     return tasks
 
 
-def list_tasks(status_: Optional[TaskStatus], db: Session):
+def list_tasks(status_: Optional[TaskStatus], db: Session, van_id: Optional[int] = None):
     q = select(VanTask).order_by(VanTask.id.desc())
     if status_:
         q = q.where(VanTask.status == status_)
+    if van_id is not None:
+        q = q.where(VanTask.van_id == van_id)
     return list(db.scalars(q.limit(200)))
 
 
@@ -346,3 +348,19 @@ def driver_return_to_depot(user: User, db: Session):
     van = _my_van(db, user)
     unloaded = return_to_depot(db, van)
     return {"van_id": van.id, "unloaded_packs": unloaded, "depot_station_id": van.depot_station_id}
+
+
+def assign_task(task_id: int, van_id: int, actor: User, db: Session):
+    """Move a pending task to another active van."""
+    task = db.get(VanTask, task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    if task.status != TaskStatus.PENDING:
+        raise HTTPException(409, f"Task is {task.status.value}")
+    van = db.get(Van, van_id)
+    if not van or not van.is_active:
+        raise HTTPException(404, "Van not found or inactive")
+    task.van_id = van.id
+    audit(db, actor, "ASSIGN_VAN_TASK", "van_task", task_id, {"van_id": van.id})
+    db.commit()
+    return task

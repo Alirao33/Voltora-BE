@@ -33,3 +33,7 @@ def latest_forecast(actor: User = Depends(get_current_user), db: Session = Depen
 
 def simulate_pilot(body: PilotRequest = PilotRequest(), actor: User = Depends(get_current_user)):
     return forecasting_service.simulate_pilot(body=body, actor=actor)
+
+
+def list_models(actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return forecasting_service.list_models(db=db)

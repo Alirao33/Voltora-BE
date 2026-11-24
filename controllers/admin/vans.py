@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -29,8 +29,12 @@ def plan_rebalancing(body: PlanRouteRequest, actor: User = Depends(get_current_u
     return fleet_service.plan_rebalancing(body=body, actor=actor, db=db)
 
 
-def list_tasks(status_: Optional[TaskStatus] = None, db: Session = Depends(get_db)):
-    return fleet_service.list_tasks(status_=status_, db=db)
+def list_tasks(status_: Optional[TaskStatus] = Query(None, alias="status"), van_id: Optional[int] = None, db: Session = Depends(get_db)):
+    return fleet_service.list_tasks(status_=status_, db=db, van_id=van_id)
+
+
+def assign_task(task_id: int, van_id: int, actor: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return fleet_service.assign_task(task_id=task_id, van_id=van_id, actor=actor, db=db)
 
 
 def get_charging_plan(actor: User = Depends(get_current_user), db: Session = Depends(get_db)):

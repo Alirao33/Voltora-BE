@@ -212,3 +212,18 @@ def cancel_booking(booking_id: int, user: User, db: Session):
     release_booking(db, b, BookingStatus.CANCELLED)
     db.commit()
     return b
+
+
+def get_booking(booking_id: int, user: User, db: Session):
+    expire_stale_bookings(db)
+    db.commit()
+    return _own_booking(db, user, booking_id)
+
+
+def complete_booking(booking_id: int, user: User, db: Session):
+    b = _own_booking(db, user, booking_id)
+    if b.status != BookingStatus.CONFIRMED:
+        raise HTTPException(409, f"Booking is {b.status.value}, unlock it first")
+    release_booking(db, b, BookingStatus.COMPLETED)
+    db.commit()
+    return b

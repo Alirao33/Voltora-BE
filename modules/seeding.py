@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config.settings import get_settings
@@ -186,6 +186,12 @@ def seed_demo(db: Session) -> None:
             refresh_status(locker_obj)
 
     db.flush()
+    # Riders need packs in hand to swap (the simulator picks IN_USE or depleted ones), so keep a few out on the road.
+    if not db.scalar(select(func.count()).select_from(Battery).where(Battery.state.in_([BatteryState.IN_USE, BatteryState.DEPLETED]))):
+        last = max((int(i[5:]) for i in db.scalars(select(Battery.id)) if i.startswith("VOLT-") and i[5:].isdigit()), default=0)
+        for k in range(1, 6):
+            db.add(Battery(id=f"VOLT-{last + k:04d}", state=BatteryState.IN_USE))
+        db.flush()
     for st in db.scalars(select(Station)):
         ensure_lockers(db, st)
     van1 = db.scalar(select(Van).where(Van.name == "Van-1"))

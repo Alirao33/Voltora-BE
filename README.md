@@ -118,4 +118,4 @@ There is no automated test suite. To check a change, run the server and use `/do
 
 ## Deployment notes
 
-Written as a long-running server (a `Dockerfile` and `docker-compose.yml` are included). On Vercel serverless the filesystem is read-only, WebSockets and the background sweeper/MQTT ingestor don't run reliably, and the SQLite default won't persist, so use a hosted Postgres.
+Written as a long-running server (a `Dockerfile` is included; the full stack compose file is `../docker-compose.yml`). On Vercel serverless the filesystem is read-only, WebSockets and the background sweeper/MQTT ingestor don't run reliably, and the SQLite default won't persist, so use a hosted Postgres.

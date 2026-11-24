@@ -10,12 +10,14 @@ from typing import Optional
 from config.settings import get_settings
 from constants.enums import AlertSeverity, AlertType, BatteryState, HealthStatus
 from integrations.devices import send_command
-from models import Battery, Station, User
+from datetime import timedelta
+from models import Battery, Station, TelemetryReading, User
 from modules.alerts import raise_alert, resolve_alerts
 from modules.audit import audit
 from modules.battery_health import health_score
 from schemas.battery import BatteryCreate, BatteryStateUpdate
 from utils.access import scoped_station_id
+from utils.dates import now_utc
 
 def lock_pack(db: Session, b: Battery, reason: str) -> None:
     """Over-temperature lockout: slot is locked via MQTT/device command and pack cannot be issued."""
@@ -167,3 +169,23 @@ def get_second_life_batteries(actor: User, db: Session):
     if target_station:
         return [p for p in packs if p.station_id == target_station]
     return packs
+
+
+def get_battery(pack_id: str, actor: User, db: Session):
+    b = db.get(Battery, pack_id)
+    if not b:
+        raise HTTPException(404, "Pack not found")
+    scoped_station_id(actor, b.station_id)
+    return b
+
+
+def telemetry_history(pack_id: str, hours: int, limit: int, actor: User, db: Session):
+    """Readings for one pack, oldest first, newest `limit` within the last `hours`."""
+    get_battery(pack_id, actor, db)
+    rows = db.scalars(
+        select(TelemetryReading)
+        .where(TelemetryReading.pack_id == pack_id, TelemetryReading.ts >= now_utc() - timedelta(hours=hours))
+        .order_by(TelemetryReading.ts.desc())
+        .limit(limit)
+    )
+    return list(reversed(list(rows)))

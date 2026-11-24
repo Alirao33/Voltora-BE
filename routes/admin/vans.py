@@ -17,3 +17,4 @@ router.add_api_route("/rebalancing/plan", controller.plan_rebalancing, methods=[
 router.add_api_route("/rebalancing/tasks", controller.list_tasks, methods=["GET"], response_model=list[VanTaskOut])
 router.add_api_route("/charging/plan", controller.get_charging_plan, methods=["GET"])
 router.add_api_route("/charging/plan/recompute", controller.recompute_charging_plan, methods=["POST"])
+router.add_api_route("/rebalancing/tasks/{task_id}/assign", controller.assign_task, methods=["PATCH"], response_model=VanTaskOut, dependencies=[Depends(require_super_admin)])

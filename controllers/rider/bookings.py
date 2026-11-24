@@ -29,3 +29,11 @@ def confirm_booking(booking_id: int, body: BookingActionRequest, user: User = De
 
 def cancel_booking(booking_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return bookings_service.cancel_booking(booking_id=booking_id, user=user, db=db)
+
+
+def get_booking(booking_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return bookings_service.get_booking(booking_id=booking_id, user=user, db=db)
+
+
+def complete_booking(booking_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return bookings_service.complete_booking(booking_id=booking_id, user=user, db=db)

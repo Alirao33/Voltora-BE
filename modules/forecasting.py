@@ -204,3 +204,8 @@ def simulate_pilot(body: PilotRequest, actor: User):
         seed=body.seed,
         van_capacity=body.van_capacity,
     )
+
+
+def list_models(db: Session):
+    rows = db.scalars(select(ForecastModelVersion).order_by(ForecastModelVersion.id.desc()).limit(50))
+    return [{"id": m.id, "algorithm": m.algorithm, "metrics": m.metrics, "n_rows": m.n_rows, "is_active": m.is_active, "trained_at": m.trained_at} for m in rows]

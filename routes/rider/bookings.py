@@ -15,3 +15,5 @@ router.add_api_route("/smart-swap", controller.smart_swap, methods=["POST"], dep
 router.add_api_route("/bookings", controller.my_bookings, methods=["GET"], response_model=list[BookingOut], dependencies=[Depends(get_current_user)])
 router.add_api_route("/bookings/{booking_id}/confirm", controller.confirm_booking, methods=["POST"], response_model=BookingOut, dependencies=[Depends(get_current_user)])
 router.add_api_route("/bookings/{booking_id}/cancel", controller.cancel_booking, methods=["POST"], response_model=BookingOut, dependencies=[Depends(get_current_user)])
+router.add_api_route("/bookings/{booking_id}", controller.get_booking, methods=["GET"], response_model=BookingOut, dependencies=[Depends(get_current_user)])
+router.add_api_route("/bookings/{booking_id}/complete", controller.complete_booking, methods=["POST"], response_model=BookingOut, dependencies=[Depends(get_current_user)])
