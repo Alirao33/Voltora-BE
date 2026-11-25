@@ -20,7 +20,7 @@ python main.py mqtt                                                  # MQTT tele
 
 Optional extras: `psycopg2-binary` (Postgres), `paho-mqtt`, `httpx` (simulator).
 
-> `requirements.txt` is the complete list (UTF-8, includes `psycopg2-binary`). The old `req.txt` is UTF-16 and incomplete; don't use it.
+> `requirements.txt` is the complete list (UTF-8, includes `psycopg2-binary`).
 
 ## Configuration
 
@@ -56,7 +56,6 @@ config/                    settings and database setup
 constants/                 enums and seed data
 utils/                     dates, geo, security, serialization helpers
 integrations/              websocket hub, metrics, device commands, MQTT, payment gateway
-legacy/                    old single-file monolith, reference only
 ```
 
 See `CLAUDE.md` for the layering rules and how to add an endpoint.
@@ -114,7 +113,7 @@ There is no automated test suite. To check a change, run the server and use `/do
 
 ## Simulators
 
-`simulator.py` has two modes. `python simulator.py swaps` runs real station swaps through the API (never home delivery): riders swap packs and pay, the returned pack's SoC and SoH drop a little before the swap is priced, and the rider, station admin and bootstrap admin all see it (orders, payments, profit log, reports). Options: `--rounds`, `--interval`, `--riders`, `--same-soh-chance`, `--charge-delay`, `--no-charge`, `--seed`. Sign-ins come from `SIM_ADMIN_USERNAME`, `SIM_ADMIN_PASSWORD`, `SIM_RIDER_PASSWORD` (defaults are the demo accounts) and `SIM_BASE_URL`. `python simulator.py telemetry` is the original fake IoT telemetry stream (uses the `DEVICE_API_KEY` header). `pilot_simulator.py` is a standalone rebalancing what-if script.
+`simulator.py` has two modes. `python simulator.py swaps` runs real station swaps through the API (never home delivery): riders swap packs and pay, the returned pack's SoC and SoH drop a little before the swap is priced, and the rider, station admin and bootstrap admin all see it (orders, payments, profit log, reports). Options: `--rounds`, `--interval`, `--riders`, `--same-soh-chance`, `--charge-delay`, `--no-charge`, `--seed`. Sign-ins come from `SIM_ADMIN_USERNAME`, `SIM_ADMIN_PASSWORD`, `SIM_RIDER_PASSWORD` (defaults are the demo accounts) and `SIM_BASE_URL`. `python simulator.py telemetry` is the original fake IoT telemetry stream (uses the `DEVICE_API_KEY` header).
 
 ## Deployment notes
 

@@ -27,7 +27,6 @@ constants/           enums.py (all enums), plus roles, bookings, orders, battery
 utils/               shared helpers: dates (PKT/UTC), numbers, geo, security (hashing), access (station scoping),
                      serialization (dual snake/camel JSON), db_types
 integrations/        infrastructure adapters: websocket hub, prometheus metrics, device commands, MQTT, payment gateway
-legacy/              the pre-split monolith (`main_monolith.py`) and old files. Reference only; never import from it.
 ```
 
 ### Rules for the layers
@@ -60,9 +59,9 @@ python main.py mqtt           # MQTT telemetry ingestor (needs paho-mqtt)
 
 Optional extras are `psycopg2-binary` (Postgres), `paho-mqtt` and `httpx` (simulator).
 
-**`req.txt` is incomplete.** It's missing `pydantic-settings` and `prometheus-client`, which the app imports at the top level. Vercel's Python runtime also expects `requirements.txt`. When you touch dependencies, keep a complete `requirements.txt`.
+Vercel's Python runtime expects `requirements.txt`. When you touch dependencies, keep it complete.
 
-`simulator.py` posts fake telemetry to `/api/telemetry/ingest` with the `DEVICE_API_KEY` header. `pilot_simulator.py` is a standalone rebalancing what-if script. `voltora.db` is the local SQLite dev database.
+`simulator.py` posts fake telemetry to `/api/telemetry/ingest` with the `DEVICE_API_KEY` header. `voltora.db` is the local SQLite dev database.
 
 ## Configuration
 
