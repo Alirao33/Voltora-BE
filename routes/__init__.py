@@ -14,7 +14,6 @@ from routes import websockets
 from routes.admin import alerts as admin_alerts
 from routes.admin import audit as admin_audit
 from routes.admin import batteries as admin_batteries
-from routes.admin import forecast as admin_forecast
 from routes.admin import lockers as admin_lockers
 from routes.admin import orders as admin_orders
 from routes.admin import payments as admin_payments
@@ -48,7 +47,6 @@ api_router.include_router(admin_plans.router)
 api_router.include_router(admin_payments.router)
 api_router.include_router(admin_alerts.router)
 api_router.include_router(admin_vans.router)
-api_router.include_router(admin_forecast.router)
 api_router.include_router(admin_audit.router)
 api_router.include_router(admin_reports.router)
 api_router.include_router(admin_riders.router)

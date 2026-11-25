@@ -14,11 +14,11 @@ python main.py          # http://127.0.0.1:8000, interactive docs at /docs
 Other commands:
 
 ```bash
-python main.py job daily_targets_and_routes|retrain_forecast|sweep   # one-off jobs
+python main.py job daily_routes|sweep   # one-off jobs
 python main.py mqtt                                                  # MQTT telemetry ingestor (needs paho-mqtt)
 ```
 
-Optional extras: `psycopg2-binary` (Postgres), `xgboost` + `numpy` (forecasting; falls back to a seasonal baseline), `mlflow`, `paho-mqtt`, `httpx` (simulator).
+Optional extras: `psycopg2-binary` (Postgres), `paho-mqtt`, `httpx` (simulator).
 
 > `requirements.txt` is the complete list (UTF-8, includes `psycopg2-binary`). The old `req.txt` is UTF-16 and incomplete; don't use it.
 

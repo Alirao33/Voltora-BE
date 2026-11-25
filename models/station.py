@@ -23,5 +23,5 @@ class Station(Base):
     host_revenue_share_pct: Mapped[float] = mapped_column(Float, default=0.0)
     is_depot: Mapped[bool] = mapped_column(Boolean, default=False)         # van loading point, not public
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    target_stock: Mapped[int] = mapped_column(Integer, default=0)          # S_target (set by forecast/admin)
+    target_stock: Mapped[int] = mapped_column(Integer, default=0)          # S_target (set by an admin)
     created_at: Mapped[dt.datetime] = mapped_column(default=now_utc)

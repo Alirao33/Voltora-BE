@@ -19,11 +19,11 @@ guards/              auth dependencies: get_current_user, require_roles/require_
 controllers/         thin: take request params, call ONE module function, return its result. No queries, no rules.
                      Mirrors routes/ one-to-one.
 modules/             business logic, one file per domain (orders, bookings, stations, lockers, batteries, fleet,
-                     pricing, payments, telemetry, forecasting, auth, users, ...). Takes plain args + a Session.
+                     pricing, payments, telemetry, auth, users, ...). Takes plain args + a Session.
 models/              SQLAlchemy ORM models, one file per table. `import models` registers every table.
 schemas/             Pydantic request/response models, grouped by domain.
 config/              settings.py (env-driven Settings), database.py (engine, SessionLocal, Base, get_db, init_db)
-constants/           enums.py (all enums), plus roles, bookings, orders, battery, forecasting, seed, security constants
+constants/           enums.py (all enums), plus roles, bookings, orders, battery, pilot, seed, security constants
 utils/               shared helpers: dates (PKT/UTC), numbers, geo, security (hashing), access (station scoping),
                      serialization (dual snake/camel JSON), db_types
 integrations/        infrastructure adapters: websocket hub, prometheus metrics, device commands, MQTT, payment gateway
@@ -54,11 +54,11 @@ legacy/              the pre-split monolith (`main_monolith.py`) and old files. 
 python -m venv .venv && .venv\Scripts\activate
 pip install fastapi "uvicorn[standard]" sqlalchemy pydantic pydantic-settings bcrypt pyjwt python-multipart prometheus-client
 python main.py                # http://127.0.0.1:8000, docs at /docs (reload on unless ENV=prod)
-python main.py job daily_targets_and_routes|retrain_forecast|sweep
+python main.py job daily_routes|sweep
 python main.py mqtt           # MQTT telemetry ingestor (needs paho-mqtt)
 ```
 
-Optional extras are `psycopg2-binary` (Postgres), `xgboost` and `numpy` (forecasting falls back to a seasonal baseline without them), `mlflow`, `paho-mqtt` and `httpx` (simulator).
+Optional extras are `psycopg2-binary` (Postgres), `paho-mqtt` and `httpx` (simulator).
 
 **`req.txt` is incomplete.** It's missing `pydantic-settings` and `prometheus-client`, which the app imports at the top level. Vercel's Python runtime also expects `requirements.txt`. When you touch dependencies, keep a complete `requirements.txt`.
 
@@ -84,9 +84,9 @@ The defaults are insecure placeholders (`change-me-*`, `Admin@2026!`), so always
 
 The app was written as a long-running server (Dockerfile and docker-compose with Postgres and Redis). On Vercel serverless:
 
-- **The filesystem is read-only** except `/tmp`, and `/tmp` doesn't persist. The SQLite default and `model_dir=models_store` (forecast pickles) won't persist, so use a hosted Postgres `DATABASE_URL`.
+- **The filesystem is read-only** except `/tmp`, and `/tmp` doesn't persist. The SQLite default won't persist, so use a hosted Postgres `DATABASE_URL`.
 - **The `lifespan` (in `application.py`) runs on every cold start.** It calls `init_db()`, which does `create_all` plus an ad-hoc `ALTER TABLE users ADD COLUMN station_id`, and then the seeding. Keep these idempotent and fast.
-- **The background sweeper (`modules/jobs.py`) and the MQTT ingestor won't run reliably.** Booking/order expiry (`sweep`) and the forecast jobs need a Vercel Cron hitting an endpoint, or an external worker.
+- **The background sweeper (`modules/jobs.py`) and the MQTT ingestor won't run reliably.** Booking/order expiry (`sweep`) and the route job need a Vercel Cron hitting an endpoint, or an external worker.
 - **WebSockets (`/ws/telemetry/{pack_id}`, `/ws/alerts`) aren't supported** on Vercel serverless functions. The in-memory hub and Prometheus counters are per-instance.
 - A Vercel entrypoint only needs to expose `app` from `main.py`.
 

@@ -53,7 +53,6 @@ class Settings(BaseSettings):
 
     ws_heartbeat_s: float = 15.0
     ws_queue_size: int = 100
-    model_dir: str = "models_store"
 
     @property
     def is_prod(self) -> bool:

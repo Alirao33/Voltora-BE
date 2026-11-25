@@ -4,8 +4,6 @@ from models.app_setting import AppSetting
 from models.audit_log import AuditLog
 from models.battery import Battery
 from models.booking import Booking
-from models.forecast_model_version import ForecastModelVersion
-from models.forecast_record import ForecastRecord
 from models.locker import Locker
 from models.order import Order
 from models.order_message import OrderMessage
@@ -20,7 +18,6 @@ from models.telemetry_reading import TelemetryReading
 from models.user import User
 from models.van import Van
 from models.van_task import VanTask
-from models.weather_observation import WeatherObservation
 
 __all__ = [
     "Alert",
@@ -28,8 +25,6 @@ __all__ = [
     "AuditLog",
     "Battery",
     "Booking",
-    "ForecastModelVersion",
-    "ForecastRecord",
     "Locker",
     "Order",
     "OrderMessage",
@@ -45,5 +40,4 @@ __all__ = [
     "User",
     "Van",
     "VanTask",
-    "WeatherObservation",
 ]

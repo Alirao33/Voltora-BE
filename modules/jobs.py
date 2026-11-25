@@ -12,32 +12,21 @@ from config.settings import get_settings
 from models import Van
 from modules.bookings import expire_stale_bookings
 from modules.fleet import generate_plan
-from modules.forecasting import drift_check, refresh_targets, train_and_register
 from modules.orders import expire_stale_orders
 
 log_jobs = logging.getLogger("voltora.jobs")
 
 
-def retrain_forecast() -> dict[str, Any]:
+def daily_routes() -> dict[str, Any]:
+    """Generate greedy rebalancing routes for active vans, using each station's target_stock."""
     with SessionLocal() as db:
-        drift = drift_check(db)
-        if drift.get("retrain"):
-            mv = train_and_register(db)
-            return {"retrained": mv.id, "drift": drift}
-        return {"retrained": None, "drift": drift}
-
-
-def daily_targets_and_routes() -> dict[str, Any]:
-    """Forecast 12h demand -> update S_target -> generate greedy rebalancing routes for active vans."""
-    with SessionLocal() as db:
-        recs = refresh_targets(db)
         planned: dict[str, Any] = {}
         for van in db.scalars(select(Van).where(Van.is_active.is_(True))):
             try:
                 planned[van.name] = len(generate_plan(db, van))
             except Exception as exc:
                 planned[van.name] = f"skipped: {exc}"
-        return {"targets": len(recs), "routes": planned}
+        return {"routes": planned}
 
 
 def sweep() -> dict[str, int]:
@@ -49,8 +38,7 @@ def sweep() -> dict[str, int]:
 
 
 JOBS = {
-    "retrain_forecast": retrain_forecast,
-    "daily_targets_and_routes": daily_targets_and_routes,
+    "daily_routes": daily_routes,
     "sweep": sweep,
 }
 

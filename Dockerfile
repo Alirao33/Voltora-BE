@@ -1,5 +1,4 @@
 # Lean image: no compiler or system libs (all drivers install as prebuilt wheels).
-# Want XGBoost forecasting? Add:  RUN pip install --no-cache-dir -r requirements-ml.txt
 FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
